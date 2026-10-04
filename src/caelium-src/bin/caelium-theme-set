@@ -1,0 +1,3 @@
+#!/bin/bash
+# caelium:summary=Apply a Caelium theme
+exec /usr/share/caelium/bin/omarchy-theme-set "$@"

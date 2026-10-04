@@ -1,0 +1,327 @@
+#!/usr/bin/env bash
+#
+# flowstate-session.sh — soundtrack orchestrator for the Flowstate bar widget.
+# Invoked by the plugin (Quickshell.execDetached), never by hand.
+#
+# Usage:
+#   flowstate-session.sh <on|off|break|resume|next> <target> <volume> <workspace> <shuffle 0|1>
+#
+#   on      start the soundtrack (launch Spotify in the background if needed, random-start, duck)
+#   off     restore the previous volume and pause (Spotify is left open)
+#   break   pause during a short break
+#   resume  resume when focus returns (restarts the context if Spotify lost it)
+#   next    skip the current song
+#
+# Music runs through the OFFICIAL Spotify desktop app, driven over MPRIS (D-Bus) with
+# busctl — the same idea as Flowstate for macOS driving Spotify.app over AppleScript.
+# No extra player, no CLI, no login inside Flowstate: you just stay logged into the
+# Spotify app you already use. Each slot target is an ordinary playlist / album /
+# artist URI or open.spotify.com link. Liked Songs work via a *mirror playlist*
+# (see scripts/setup-liked.sh and the README) because the desktop app cannot
+# shuffle Liked Songs as a context.
+
+set -uo pipefail
+
+# Run under a fixed, trusted PATH (only root-owned system dirs) and resolve every
+# security-relevant helper to an absolute path, so a hostile entry planted earlier
+# in the user's PATH can never shadow the interpreter or any tool this script calls.
+# A normal widget action (focus start / break / resume) runs this on every phase
+# transition, so the *whole* runtime path is closed — not just the setup scripts.
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/share/omarchy/bin
+pin() {  # <command> -> absolute path (or fail loudly)
+  local p; p="$(command -v -- "$1" 2>/dev/null || true)"
+  [[ -n "$p" && -x "$p" ]] || { printf 'flowstate: required command not found: %s\n' "$1" >&2; exit 127; }
+  printf '%s' "$p"
+}
+opt() { command -v -- "$1" 2>/dev/null || true; }   # optional tool -> abs path or ""
+
+DIRNAME="$(pin dirname)"; MKDIR="$(pin mkdir)"; DATE="$(pin date)"; BUSCTL="$(pin busctl)"
+SED="$(pin sed)"; AWK="$(pin awk)"; SLEEP="$(pin sleep)"; SEQ="$(pin seq)"
+HEAD="$(pin head)"; CAT="$(pin cat)"; RM="$(pin rm)"; SETSID="$(pin setsid)"
+# Optional (guarded before use): a compositor and JSON tool aren't guaranteed.
+HYPRCTL="$(opt hyprctl)"; JQ="$(opt jq)"
+
+ACTION="${1:-}"
+TARGET="${2:-}"
+VOLUME="${3:-35}"
+SPOTIFY_WS="${4:-9}"
+SHUFFLE="${5:-1}"
+
+SCRIPT_DIR="$(cd -- "$("$DIRNAME" -- "${BASH_SOURCE[0]}")" && pwd)"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/flowstate"
+PREV_VOL_FILE="$STATE_DIR/prev-volume"
+LOG_FILE="$STATE_DIR/session.log"
+
+BUS="org.mpris.MediaPlayer2.spotify"
+OBJ="/org/mpris/MediaPlayer2"
+PLAYER="org.mpris.MediaPlayer2.Player"
+SPOTIFY_CLASS="spotify"                 # Hyprland window class (case-insensitive match)
+
+"$MKDIR" -p "$STATE_DIR"
+log() { printf '%s  %s\n' "$("$DATE" '+%H:%M:%S')" "$*" >> "$LOG_FILE" 2>/dev/null || true; }
+have() { command -v "$1" >/dev/null 2>&1; }
+notify() {
+  local n
+  if n="$(opt omarchy-notification-send)" && [ -n "$n" ]; then "$n" -g "◷" "Flowstate" "$1"
+  elif n="$(opt notify-send)" && [ -n "$n" ]; then "$n" "Flowstate" "$1"; fi
+  return 0
+}
+
+# --- MPRIS helpers -----------------------------------------------------------
+
+# busctl prints typed values ("s \"Playing\"", "b true", "d 0.35"); strip the type + quotes.
+sp_get()  { "$BUSCTL" --user get-property "$BUS" "$OBJ" "$PLAYER" "$1" 2>/dev/null | "$SED" -E 's/^[a-z] //; s/^"(.*)"$/\1/'; }
+sp_set()  { "$BUSCTL" --user set-property "$BUS" "$OBJ" "$PLAYER" "$1" "$2" "$3" >/dev/null 2>&1; }   # <prop> <sig> <value>
+sp_call() { "$BUSCTL" --user call "$BUS" "$OBJ" "$PLAYER" "$@" >/dev/null 2>&1; }                     # <method> [sig args…]
+sp_up()   { "$BUSCTL" --user status "$BUS" >/dev/null 2>&1; }
+
+sp_status()  { sp_get PlaybackStatus; }           # Playing | Paused | Stopped
+sp_playing() { [ "$(sp_status)" = "Playing" ]; }
+
+# Volume is 0.0–1.0 on the bus; Flowstate talks in percent.
+sp_volume_pct() { local v; v="$(sp_get Volume)"; [ -n "$v" ] && "$AWK" -v v="$v" 'BEGIN{printf "%d", (v*100)+0.5}'; }
+sp_set_volume_pct() {
+  [[ "$1" =~ ^[0-9]+$ ]] || return 0
+  local p=$1; [ "$p" -gt 100 ] && p=100
+  sp_set Volume d "$("$AWK" -v p="$p" 'BEGIN{printf "%.3f", p/100}')"
+}
+
+sp_wait_up() {  # wait for the MPRIS name to appear (Spotify freshly launched)
+  local i
+  for i in $("$SEQ" 1 60); do sp_up && return 0; "$SLEEP" 0.5; done
+  return 1
+}
+
+# --- Hyprland: keep Spotify entirely in the background -----------------------
+#
+# Two things make Spotify grab your screen, and both are handled here:
+#  1. A freshly launched window maps on the current workspace with focus. So Spotify
+#     is launched through Hyprland's exec dispatcher with per-launch rules
+#     ("[workspace N silent; noinitialfocus] …") — it opens straight on the music
+#     workspace, unfocused, and nothing persists. Fallback: plain launch + silent move.
+#  2. On OpenUri, Spotify asks the compositor to ACTIVATE its window (as if you had
+#     clicked a spotify: link) and Omarchy's Hyprland honours that
+#     (misc.focus_on_activate), yanking you to Spotify's workspace — and it does the
+#     same once while starting up. A per-window rule (focus_on_activate = false),
+#     enabled before launch, stops it. Hyprland can't remove runtime rules, only
+#     disable them, so the handle is kept in a Lua global and toggled: enabled while a
+#     session runs, disabled again at stop so Spotify behaves normally afterwards.
+
+SPOTIFY_MATCH='^([Ss]potify)$'
+have_hypr() { [ -n "$HYPRCTL" ]; }                        # compositor control available?
+hypr_ok() { [ "$("$HYPRCTL" "$@" 2>/dev/null)" = "ok" ]; }   # hyprctl exits 0 even on errors
+
+spotify_quiet_rule() {  # <true|false>
+  have_hypr || return 0
+  hypr_ok eval "
+    flowstate_rules = flowstate_rules or {}
+    local ok = flowstate_rules.focus and pcall(function() flowstate_rules.focus:set_enabled($1) end)
+    if not ok and $1 then
+      flowstate_rules.focus = hl.window_rule({ match = { class = '$SPOTIFY_MATCH' }, focus_on_activate = false })
+    end" && return 0
+  # Pre-Lua Hyprland: best effort, enable only (legacy rules can't be toggled either).
+  [ "$1" = true ] && "$HYPRCTL" keyword windowrulev2 "focusonactivate 0, class:$SPOTIFY_MATCH" >/dev/null 2>&1
+  return 0
+}
+
+LAUNCH_NEEDS_MOVE=0
+launch_spotify() {  # <workspace>
+  local spotify_bin uwsm cmd rules="noinitialfocus"
+  spotify_bin="$(opt spotify)"; cmd="$spotify_bin"
+  uwsm="$(opt uwsm-app)"; [ -n "$uwsm" ] && cmd="$uwsm -- $spotify_bin"
+  [ "$1" -gt 0 ] 2>/dev/null && rules="workspace $1 silent; noinitialfocus"
+  if have_hypr; then
+    hypr_ok dispatch "hl.dsp.exec_cmd(\"[$rules] $cmd\")" && { log "launched via exec_cmd [$rules]"; return 0; }
+    hypr_ok dispatch exec "[$rules] $cmd" && { log "launched via legacy exec [$rules]"; return 0; }
+  fi
+  log "launched plainly (will move the window)"
+  "$SETSID" $cmd >/dev/null 2>&1 &
+  LAUNCH_NEEDS_MOVE=1
+}
+
+hypr_addr_by_class() {  # case-insensitive class match -> window addresses
+  local cls="${1,,}"
+  { have_hypr && [ -n "$JQ" ]; } || return 0
+  "$HYPRCTL" clients -j 2>/dev/null \
+    | "$JQ" -r --arg c "$cls" '.[] | select((.class // "" | ascii_downcase) == $c) | .address'
+}
+
+# Hyprland ≥ 0.56 dispatches through a Lua API; older releases use the classic string.
+move_window_to_ws() {  # <address> <workspace>
+  "$HYPRCTL" dispatch "hl.dsp.window.move({ workspace = \"$2\", follow = false, window = \"address:$1\" })" >/dev/null 2>&1 \
+    || "$HYPRCTL" dispatch movetoworkspacesilent "$2,address:$1" >/dev/null 2>&1
+}
+
+# Fallback placement (only when the exec-dispatcher rules were unavailable): move a
+# freshly launched Spotify window to the music workspace, silently.
+place_class_on_ws() {  # <class> <ws>
+  local cls="$1" ws="$2" a i
+  [ "$ws" -gt 0 ] 2>/dev/null || return 0
+  { have_hypr && [ -n "$JQ" ]; } || return 0
+  for i in $("$SEQ" 1 40); do
+    a="$(hypr_addr_by_class "$cls" | "$HEAD" -1)"
+    [ -n "$a" ] && break
+    "$SLEEP" 0.25
+  done
+  hypr_addr_by_class "$cls" | while IFS= read -r a; do
+    [ -n "$a" ] && move_window_to_ws "$a" "$ws"
+  done
+}
+
+# --- Target parsing → a spotify: URI ----------------------------------------
+
+is_liked() {
+  case "${1,,}" in
+    liked|likes|ncspot:liked|*:collection:tracks|*:collection) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Resolve a slot target to a `spotify:<kind>:<id>` URI that OpenUri accepts.
+# Accepts spotify: URIs, open.spotify.com links (incl. intl-xx/ paths and ?si=…),
+# or a bare id (assumed to be a playlist). Output is restricted to URI-safe chars.
+resolve_uri() {
+  local raw="${1// /}" uri="" rest kind
+  [ -z "$raw" ] && return 1
+  case "$raw" in
+    spotify:*) uri="$raw" ;;
+    *open.spotify.com/*)
+      rest="${raw#*open.spotify.com/}"
+      case "$rest" in intl-*/*) rest="${rest#*/}" ;; esac
+      kind="${rest%%/*}"
+      rest="${rest#*/}"; rest="${rest%%\?*}"; rest="${rest%%/*}"
+      case "$kind" in playlist|album|artist|track) uri="spotify:$kind:$rest" ;; esac
+      ;;
+    *) uri="spotify:playlist:$raw" ;;
+  esac
+  [[ "$uri" =~ ^spotify:[A-Za-z0-9._:-]+$ ]] || return 1
+  echo "$uri"
+}
+
+# --- Soundtrack sequence -----------------------------------------------------
+
+# Start the context and confirm Spotify actually reports Playing (a just-launched
+# app can swallow the first OpenUri while it warms up).
+open_uri_verified() {  # <uri>
+  local i j
+  for i in 1 2 3; do
+    sp_call OpenUri s "$1"
+    for j in $("$SEQ" 1 12); do "$SLEEP" 0.5; sp_playing && { log "playing (attempt $i)"; return 0; }; done
+    sp_call Play; "$SLEEP" 1
+    sp_playing && { log "playing after Play (attempt $i)"; return 0; }
+  done
+  return 1
+}
+
+sp_ensure_shuffle() {  # <true|false>
+  sp_set Shuffle b "$1"; "$SLEEP" 0.4
+  [ "$(sp_get Shuffle)" = "$1" ] || { sp_set Shuffle b "$1"; "$SLEEP" 0.4; }
+}
+
+sp_ensure_repeat_context() {
+  sp_set LoopStatus s Playlist; "$SLEEP" 0.4
+  [ "$(sp_get LoopStatus)" = "Playlist" ] || sp_set LoopStatus s Playlist
+}
+
+engage() {
+  log "=== ENGAGE target='$TARGET' vol=$VOLUME ws=$SPOTIFY_WS shuffle=$SHUFFLE"
+
+  if is_liked "$TARGET"; then
+    log "target is 'liked' — not playable directly"
+    notify "Liked Songs need a mirror playlist — open ⚙ Edit → Liked Songs for the 30-second setup"
+    return 1
+  fi
+  local uri
+  if ! uri="$(resolve_uri "$TARGET")"; then
+    notify "No soundtrack configured — set a Spotify playlist in ⚙ Edit"
+    return 1
+  fi
+
+  # Enable the quiet rule BEFORE launching: Spotify also requests activation of its
+  # window while it starts up (not only on OpenUri), so the rule must already exist.
+  spotify_quiet_rule true
+
+  local launched=0
+  if ! sp_up; then
+    have spotify || { notify "Spotify isn't installed (omarchy pkg aur add spotify)"; return 1; }
+    log "launching spotify"
+    launch_spotify "$SPOTIFY_WS"; launched=1
+    [ "$LAUNCH_NEEDS_MOVE" = 1 ] && place_class_on_ws "$SPOTIFY_CLASS" "$SPOTIFY_WS" &
+    if ! sp_wait_up; then
+      notify "Spotify didn't come up — is it logged in?"
+      return 1
+    fi
+    "$SLEEP" 1   # let it finish loading before the first command
+  fi
+
+  # Remember the pre-session volume so it can be restored at the end. A freshly
+  # launched Spotify reports 0 until something plays, so in that case we read it
+  # right after playback starts instead (a sub-second blip, unavoidable).
+  local prev=""
+  if [ "$launched" = 0 ]; then
+    prev="$(sp_volume_pct)"
+    [ -n "$prev" ] && [ "$prev" -gt 0 ] && echo "$prev" > "$PREV_VOL_FILE"
+    sp_set_volume_pct 0          # start muted so track 1 + the shuffle skips are silent
+  fi
+
+  if ! open_uri_verified "$uri"; then
+    [ -n "$prev" ] && sp_set_volume_pct "$prev"      # never strand Spotify at 0
+    notify "Couldn't start the soundtrack — is Spotify logged in?"
+    return 1
+  fi
+
+  if [ "$launched" = 1 ]; then
+    prev="$(sp_volume_pct)"
+    [ -n "$prev" ] && [ "$prev" -gt 0 ] && echo "$prev" > "$PREV_VOL_FILE"
+    sp_set_volume_pct 0
+  fi
+
+  if [ "$SHUFFLE" = "1" ]; then
+    sp_ensure_shuffle true
+    local n=$(( (RANDOM % 4) + 1 )) k           # jump to a varied track in shuffle order
+    for ((k = 0; k < n; k++)); do sp_call Next; "$SLEEP" 0.4; done
+  fi
+  sp_ensure_repeat_context                       # loop so a focus block never falls silent
+  sp_playing || sp_call Play
+  sp_set_volume_pct "$VOLUME"                    # unmute to the focus volume
+  log "=== ENGAGE done: uri=$uri prev=${prev:-?} focus=$VOLUME ==="
+}
+
+release() {
+  log "=== RELEASE ==="
+  spotify_quiet_rule false                       # let Spotify behave normally again
+  sp_up || { "$RM" -f "$PREV_VOL_FILE"; return 0; }
+  if [ -f "$PREV_VOL_FILE" ]; then
+    local v; v="$("$CAT" "$PREV_VOL_FILE")"
+    sp_set_volume_pct "$v"
+    "$RM" -f "$PREV_VOL_FILE"
+  fi
+  sp_call Pause
+}
+
+do_break() {
+  log "break: pause"
+  sp_up && sp_call Pause
+  return 0
+}
+
+do_resume() {
+  log "resume: play"
+  sp_up || { engage; return; }                   # Spotify was closed during the break
+  sp_call Play
+  "$SLEEP" 1
+  sp_playing && return 0
+  log "resume: context lost — re-engaging"
+  engage
+}
+
+do_next() { sp_up && sp_call Next; return 0; }
+
+case "$ACTION" in
+  on)     engage ;;
+  off)    release ;;
+  break)  do_break ;;
+  resume) do_resume ;;
+  next)   do_next ;;
+  *)      echo "usage: $0 <on|off|break|resume|next> <target> <volume> <workspace> <shuffle>" >&2; exit 2 ;;
+esac

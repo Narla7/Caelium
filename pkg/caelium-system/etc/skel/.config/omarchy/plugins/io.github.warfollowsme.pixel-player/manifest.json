@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.warfollowsme.pixel-player",
+  "name": "Pixel Player",
+  "version": "1.1.0",
+  "author": "warfollowsme",
+  "description": "A tiny reactive dot equalizer that opens a tactile, theme-aware MPRIS player.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Pixel Player",
+    "description": "Reactive audio dots with a compact hardware-inspired media popup.",
+    "category": "Audio",
+    "allowMultiple": false,
+    "defaultSection": "left"
+  }
+}

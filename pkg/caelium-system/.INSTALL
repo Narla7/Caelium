@@ -1,0 +1,17 @@
+post_install() {
+  # Replace the Arch /etc/os-release symlink with Caelium branding.
+  # Keep LOGO=arch so fastfetch shows the Arch logo.
+  rm -f /etc/os-release
+  cat > /etc/os-release <<'EOF'
+NAME="Caelium OS"
+PRETTY_NAME="Caelium OS"
+ID=caelium
+ID_LIKE=arch
+LOGO=arch
+HOME_URL="https://github.com/caelium/caelium"
+EOF
+}
+
+post_upgrade() {
+  post_install
+}

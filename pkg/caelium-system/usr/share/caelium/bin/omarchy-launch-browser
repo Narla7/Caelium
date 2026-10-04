@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# caelium:summary=Launch the Zen browser
+# caelium:args=[url]
+
+exec setsid uwsm-app -- zen-browser "$@"

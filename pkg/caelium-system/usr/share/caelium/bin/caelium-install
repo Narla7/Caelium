@@ -1,0 +1,132 @@
+#!/bin/bash
+set -euo pipefail
+
+# caelium:summary=Install Caelium to a disk (TTY installer)
+
+if [[ $EUID -ne 0 ]]; then
+  gum style --border normal --border-foreground "#ff5555" "Run this installer as root."
+  exit 1
+fi
+
+gum style --border double --align center --width 60 \
+  --foreground "#b1bed2" "CAELIUM" "Arch larp distro installer" ""
+
+DISK=$(lsblk -dpno NAME,SIZE,TYPE | awk '$3=="disk"{print $1" ("$2")"}' | gum choose --header="Select disk to install Caelium to")
+DISK=${DISK%% *}
+
+gum confirm "This will ERASE everything on $DISK. Continue?" || exit 1
+
+LUKS=false
+if gum confirm "Encrypt the root partition with LUKS?"; then
+  LUKS=true
+fi
+
+FS=$(gum choose --header "Root filesystem" "btrfs" "ext4")
+
+USERNAME=$(gum input --placeholder "username" --prompt "Username: ")
+FULLNAME=$(gum input --placeholder "full name" --prompt "Full name: ")
+PASSWORD=$(gum password --prompt "User password: ")
+PASSWORD2=$(gum password --prompt "Confirm password: ")
+[[ $PASSWORD == "$PASSWORD2" ]] || { gum style --foreground "#ff5555" "Passwords do not match"; exit 1; }
+
+HOSTNAME=$(gum input --value "caelium" --prompt "Hostname: ")
+TZ=$(timedatectl show --property=Timezone --value)
+
+gum confirm "Start installation on $DISK?" || exit 1
+
+# Partitioning
+gum spin --title "Partitioning $DISK..." -- sgdisk -Z "$DISK"
+sgdisk -n 0:0:+512M -t 0:ef00 -c 0:"EFI" "$DISK"
+sgdisk -n 0:0:0 -t 0:8300 -c 0:"ROOT" "$DISK"
+partprobe "$DISK"
+sleep 2
+
+EFI_PART=$(lsblk -pnro NAME,PARTTYPE "$DISK" | awk '$2=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"{print $1}')
+ROOT_PART=$(lsblk -pnro NAME,PARTTYPE "$DISK" | awk '$2=="0fc63daf-8483-4772-8e69-69d4273f3f0a"{print $1}')
+
+wipefs -af "$EFI_PART"
+mkfs.vfat -F32 -n CAELIUM_EFI "$EFI_PART"
+
+wipefs -af "$ROOT_PART"
+if $LUKS; then
+  cryptsetup luksFormat --type luks2 "$ROOT_PART"
+  cryptsetup open "$ROOT_PART" cryptroot
+  ROOT_TARGET=/dev/mapper/cryptroot
+else
+  ROOT_TARGET=$ROOT_PART
+fi
+
+if [[ $FS == "btrfs" ]]; then
+  mkfs.btrfs -f -L caelium "$ROOT_TARGET"
+else
+  mkfs.ext4 -F -L caelium "$ROOT_TARGET"
+fi
+
+mount "$ROOT_TARGET" /mnt
+mkdir -p /mnt/boot
+mount "$EFI_PART" /mnt/boot
+
+# Base pacstrap
+gum spin --title "Installing base system..." -- pacstrap -K /mnt base base-devel linux linux-firmware linux-headers
+
+# Install Caelium system package from the ISO cache
+CAELIUM_PKG=$(ls /var/cache/pacman/pkg/caelium-system-*.pkg.tar.zst 2>/dev/null | head -1)
+if [[ -z ${CAELIUM_PKG:-} ]]; then
+  gum style --foreground "#ff5555" "caelium-system package not found in live cache. Aborting."
+  exit 1
+fi
+cp "$CAELIUM_PKG" /mnt/tmp/
+
+# Fstab
+genfstab -U /mnt >> /mnt/etc/fstab
+
+# Chroot configuration
+arch-chroot /mnt /bin/bash <<CHROOT
+set -euo pipefail
+
+echo "$HOSTNAME" > /etc/hostname
+ln -sf "/usr/share/zoneinfo/$TZ" /etc/localtime
+sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+
+# Sudo for wheel
+pacman -S --needed --noconfirm sudo
+echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
+chmod 440 /etc/sudoers.d/wheel
+
+# Install caelium-system and pull dependencies
+pacman -U --noconfirm /tmp/$(basename "$CAELIUM_PKG")
+
+# Initramfs
+if $LUKS; then
+  sed -i 's/^\(HOOKS=.*filesystems\)/\1 encrypt/' /etc/mkinitcpio.conf
+fi
+mkinitcpio -P
+
+# GRUB
+if $LUKS; then
+  sed -i 's/^#GRUB_ENABLE_CRYPTODISK=.*/GRUB_ENABLE_CRYPTODISK=y/' /etc/default/grub
+fi
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=CAELIUM --removable
+grub-install --target=i386-pc "$DISK" || true
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# User
+useradd -m -G wheel,video,audio,network,storage,lp -c "$FULLNAME" "$USERNAME"
+printf '%s:%s\n' "$USERNAME" "$PASSWORD" | chpasswd
+
+# Services
+systemctl enable ly.service
+systemctl enable NetworkManager.service
+systemctl enable bluetooth.service
+
+# Apply default theme
+su - "$USERNAME" -c "caelium-theme-set miasma"
+CHROOT
+
+umount -R /mnt
+
+gum style --border double --align center --width 60 \
+  --foreground "#b1bed2" "CAELIUM INSTALLED" \
+  "Reboot and log in via ly as $USERNAME" ""

@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.keegan-sucks.flowstate",
+  "name": "Flowstate",
+  "version": "0.3.0",
+  "author": "keegan-sucks",
+  "license": "MIT",
+  "description": "A Pomodoro focus timer for the Omarchy bar that drives the official Spotify app: a shuffled soundtrack that pauses on breaks, Liked Songs via a mirror playlist, and distinct phase-boundary sounds.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Flowstate",
+    "description": "Pomodoro focus timer with a Spotify soundtrack and phase sounds",
+    "category": "Time",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "schema": [
+      {
+        "key": "workMinutes",
+        "type": "number",
+        "label": "Focus minutes",
+        "description": "Length of each focus block.",
+        "defaultValue": 25
+      },
+      {
+        "key": "shortBreakMinutes",
+        "type": "number",
+        "label": "Short break minutes",
+        "description": "Length of the short break between focus blocks. (There is no timed long break — the session ends after the last focus block.)",
+        "defaultValue": 5
+      },
+      {
+        "key": "cycles",
+        "type": "number",
+        "label": "Focus cycles",
+        "description": "Number of focus blocks in a session.",
+        "defaultValue": 4
+      },
+      {
+        "key": "playSoundtrack",
+        "type": "boolean",
+        "label": "Play soundtrack",
+        "description": "Drive the Spotify desktop app: start the active slot (shuffled, ducked) when a session begins; pause it during breaks; restore the volume + pause at the end.",
+        "defaultValue": true
+      },
+      {
+        "key": "spotifyVolume",
+        "type": "number",
+        "label": "Focus volume (%)",
+        "description": "Spotify's volume during focus (0-100). The pre-session volume is restored on stop.",
+        "defaultValue": 35
+      },
+      {
+        "key": "alwaysShuffle",
+        "type": "boolean",
+        "label": "Always shuffle",
+        "description": "Shuffle the soundtrack and start on a random track.",
+        "defaultValue": true
+      },
+      {
+        "key": "spotifyWorkspace",
+        "type": "number",
+        "label": "Spotify workspace",
+        "description": "When Flowstate has to launch Spotify, it opens straight on this workspace, silently and unfocused. 0 opens it where you are (still unfocused). An already-running Spotify is never moved.",
+        "defaultValue": 9
+      },
+      {
+        "key": "slot1Label",
+        "type": "string",
+        "label": "Soundtrack 1 name",
+        "defaultValue": "Lofi"
+      },
+      {
+        "key": "slot1Uri",
+        "type": "string",
+        "label": "Soundtrack 1 target",
+        "description": "Spotify playlist/album/artist URI or open.spotify.com link. Default: Spotify's Lofi Beats.",
+        "defaultValue": "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
+      },
+      {
+        "key": "slot2Label",
+        "type": "string",
+        "label": "Soundtrack 2 name",
+        "defaultValue": "Deep Focus"
+      },
+      {
+        "key": "slot2Uri",
+        "type": "string",
+        "label": "Soundtrack 2 target",
+        "description": "Spotify playlist/album/artist URI or open.spotify.com link. Default: Spotify's Deep Focus.",
+        "defaultValue": "spotify:playlist:37i9dQZF1DWZeKCadgRdKQ"
+      },
+      {
+        "key": "slot3Label",
+        "type": "string",
+        "label": "Soundtrack 3 name",
+        "defaultValue": "Piano"
+      },
+      {
+        "key": "slot3Uri",
+        "type": "string",
+        "label": "Soundtrack 3 target",
+        "description": "Spotify playlist/album/artist URI or open.spotify.com link. Default: Spotify's Peaceful Piano. For Liked Songs, use a mirror playlist (README → Liked Songs). Clear to hide the button.",
+        "defaultValue": "spotify:playlist:37i9dQZF1DX4sWSpwq3LiO"
+      },
+      {
+        "key": "activeSlot",
+        "type": "number",
+        "label": "Active soundtrack",
+        "description": "Which soundtrack is selected (0, 1, or 2).",
+        "defaultValue": 0
+      },
+      {
+        "key": "soundsEnabled",
+        "type": "boolean",
+        "label": "Phase sounds",
+        "description": "Play a distinct sound at each phase boundary.",
+        "defaultValue": true
+      },
+      {
+        "key": "shortBreakSound",
+        "type": "select",
+        "label": "Short-break sound",
+        "description": "Played when a focus block ends.",
+        "defaultValue": "bell",
+        "options": [
+          { "value": "bell", "label": "Bell" },
+          { "value": "complete", "label": "Complete" },
+          { "value": "message", "label": "Message" },
+          { "value": "message-new-instant", "label": "Message (instant)" },
+          { "value": "alarm-clock-elapsed", "label": "Alarm" },
+          { "value": "dialog-information", "label": "Info" },
+          { "value": "dialog-warning", "label": "Warning" },
+          { "value": "window-attention", "label": "Attention" },
+          { "value": "device-added", "label": "Device added" },
+          { "value": "service-login", "label": "Login" },
+          { "value": "service-logout", "label": "Logout" },
+          { "value": "power-plug", "label": "Power plug" },
+          { "value": "power-unplug", "label": "Power unplug" },
+          { "value": "phone-incoming-call", "label": "Phone" },
+          { "value": "camera-shutter", "label": "Shutter" }
+        ]
+      },
+      {
+        "key": "backToWorkSound",
+        "type": "select",
+        "label": "Back-to-work sound",
+        "description": "Played when a short break ends.",
+        "defaultValue": "complete",
+        "options": [
+          { "value": "bell", "label": "Bell" },
+          { "value": "complete", "label": "Complete" },
+          { "value": "message", "label": "Message" },
+          { "value": "message-new-instant", "label": "Message (instant)" },
+          { "value": "alarm-clock-elapsed", "label": "Alarm" },
+          { "value": "dialog-information", "label": "Info" },
+          { "value": "dialog-warning", "label": "Warning" },
+          { "value": "window-attention", "label": "Attention" },
+          { "value": "device-added", "label": "Device added" },
+          { "value": "service-login", "label": "Login" },
+          { "value": "service-logout", "label": "Logout" },
+          { "value": "power-plug", "label": "Power plug" },
+          { "value": "power-unplug", "label": "Power unplug" },
+          { "value": "phone-incoming-call", "label": "Phone" },
+          { "value": "camera-shutter", "label": "Shutter" }
+        ]
+      },
+      {
+        "key": "longBreakSound",
+        "type": "select",
+        "label": "Session-end sound",
+        "description": "Played when the final focus block ends (the session's long break).",
+        "defaultValue": "alarm-clock-elapsed",
+        "options": [
+          { "value": "bell", "label": "Bell" },
+          { "value": "complete", "label": "Complete" },
+          { "value": "message", "label": "Message" },
+          { "value": "message-new-instant", "label": "Message (instant)" },
+          { "value": "alarm-clock-elapsed", "label": "Alarm" },
+          { "value": "dialog-information", "label": "Info" },
+          { "value": "dialog-warning", "label": "Warning" },
+          { "value": "window-attention", "label": "Attention" },
+          { "value": "device-added", "label": "Device added" },
+          { "value": "service-login", "label": "Login" },
+          { "value": "service-logout", "label": "Logout" },
+          { "value": "power-plug", "label": "Power plug" },
+          { "value": "power-unplug", "label": "Power unplug" },
+          { "value": "phone-incoming-call", "label": "Phone" },
+          { "value": "camera-shutter", "label": "Shutter" }
+        ]
+      },
+      {
+        "key": "shortBreakVolume",
+        "type": "number",
+        "label": "Short-break sound volume",
+        "description": "0.0 – 1.0",
+        "defaultValue": 1
+      },
+      {
+        "key": "backToWorkVolume",
+        "type": "number",
+        "label": "Back-to-work sound volume",
+        "description": "0.0 – 1.0",
+        "defaultValue": 1
+      },
+      {
+        "key": "longBreakVolume",
+        "type": "number",
+        "label": "Session-end sound volume",
+        "description": "0.0 – 1.0",
+        "defaultValue": 1
+      },
+      {
+        "key": "focusGlyph",
+        "type": "string",
+        "label": "Focus glyph",
+        "description": "Glyph shown in the bar during focus.",
+        "defaultValue": "⌖"
+      },
+      {
+        "key": "breakGlyph",
+        "type": "string",
+        "label": "Break glyph",
+        "description": "Glyph shown in the bar during a break.",
+        "defaultValue": "☾"
+      }
+    ]
+  },
+  "homepage": "https://github.com/keegan-sucks/omarchy-flowstate",
+  "repository": "https://github.com/keegan-sucks/omarchy-flowstate"
+}

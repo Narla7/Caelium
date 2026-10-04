@@ -1,0 +1,6 @@
+NAME="Caelium OS"
+PRETTY_NAME="Caelium OS"
+ID=caelium
+ID_LIKE=arch
+LOGO=arch
+HOME_URL="https://github.com/caelium/caelium"

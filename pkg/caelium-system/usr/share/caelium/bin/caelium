@@ -1,0 +1,5 @@
+#!/bin/bash
+# caelium:summary=Caelium command center
+# Caelium is a fork of Omarchy. This wrapper keeps internal Omarchy tooling intact
+# while exposing a Caelium-branded CLI.
+exec /usr/share/caelium/bin/omarchy "$@"

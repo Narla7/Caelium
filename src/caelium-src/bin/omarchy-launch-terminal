@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# omarchy:summary=Launch a terminal in the active terminal's current directory
+# omarchy:args=[--pid=<terminal-pid>] [command...]
+
+pid=""
+if [[ ${1:-} == --pid=* ]]; then
+  pid=${1#--pid=}
+  shift
+fi
+
+local cwd
+if [[ -n $pid ]]; then
+  cwd=$(omarchy-cmd-terminal-cwd "$pid" 2>/dev/null) || cwd="$HOME"
+else
+  cwd="$HOME"
+fi
+exec setsid uwsm-app -- kitty --directory "$cwd" "$@"

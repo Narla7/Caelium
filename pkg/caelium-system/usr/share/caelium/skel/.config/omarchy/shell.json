@@ -1,0 +1,77 @@
+{
+  "bar": {
+    "centerAnchor": "omarchy.clock",
+    "layout": {
+      "center": [
+        {
+          "id": "omarchy.keyboard-layout"
+        },
+        {
+          "id": "omarchy.indicators"
+        },
+        {
+          "id": "omarchy.system-update"
+        },
+        {
+          "id": "omarchy.clock",
+          "format": "dddd h:mm AP",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "verticalFormat": "HH\n—\nmm"
+        },
+        {
+          "id": "io.github.keegan-sucks.flowstate",
+          "activeSlot": 1,
+          "backToWorkSound": "power-plug",
+          "backToWorkVolume": 1,
+          "breakGlyph": "☾",
+          "focusGlyph": "𖤓",
+          "longBreakSound": "complete",
+          "longBreakVolume": 1,
+          "shortBreakVolume": 1,
+          "slot2Uri": "https://open.spotify.com/album/0PThwJyXIIgpUY1Pn8qlqU",
+          "soundsEnabled": true,
+          "spotifyVolume": 100,
+          "spotifyWorkspace": 5
+        }
+      ],
+      "left": [
+        {
+          "id": "omarchy.menu"
+        },
+        {
+          "id": "omarchy.workspaces"
+        }
+      ],
+      "right": [
+        {
+          "id": "omarchy.tray"
+        },
+        {
+          "id": "io.github.warfollowsme.pixel-player"
+        },
+        {
+          "id": "omarchy.bluetooth"
+        },
+        {
+          "id": "omarchy.network"
+        },
+        {
+          "id": "omarchy.audio"
+        },
+        {
+          "id": "omarchy.monitor"
+        },
+        {
+          "id": "omarchy.power"
+        }
+      ]
+    },
+    "position": "top",
+    "transparent": true
+  },
+  "idle": {
+    "lock": 900,
+    "screensaver": 0
+  },
+  "version": 1
+}

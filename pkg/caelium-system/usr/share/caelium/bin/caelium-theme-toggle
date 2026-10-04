@@ -1,0 +1,13 @@
+#!/bin/bash
+set -euo pipefail
+
+# caelium:summary=Toggle between Caelium's two themes
+
+THEME_NAME_FILE="$HOME/.local/state/omarchy/current/theme.name"
+CURRENT=$(cat "$THEME_NAME_FILE" 2>/dev/null || echo "miasma")
+
+if [[ $CURRENT == "miasma" ]]; then
+  caelium-theme-set "shinji-lock-in"
+else
+  caelium-theme-set "miasma"
+fi
