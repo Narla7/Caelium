@@ -41,6 +41,8 @@ It comes with a Gruvbox theme with a Radiohead wallpaper (i love radiohead + gre
 ## Installation
 The ISO is giving me some trouble right now, it will be out soon :)
 
-##omarchy
+## omarchy
 I clearly took a lot of inspiration from *bloatarchy* while making this. This distro MOGS bloatarchy to death. Dw its better. Unlike *bloatarchy* it does not have any AI bs. Also it is up-to-date with arch
+
+## License 
  [LICENSE](./LICENSE).
