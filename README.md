@@ -1,17 +1,23 @@
+  ___ __ _  ___| (_)_   _ _ __ ___  
+ / __/ _` |/ _ \ | | | | | '_ ` _ \ 
+| (_| (_| |  __/ | | |_| | | | | | |
+ \___\__,_|\___|_|_|\__,_|_| |_| |_|
+                                    
 # Caelium
 
-A lean, up-to-date, AI-free Arch Linux larp distro.
+Minimal. Opinionated. Linux.
 
-Ships with:
-- **Terminal:** Kitty
-- **Browser:** Zen
-- **WM:** Hyprland + Quickshell bar (forked from Omarchy's shell)
-- **Login manager:** ly
-- **Bootloader:** GRUB
-- **Larp tools:** fastfetch, cava, btop, cmatrix
-- **Notes:** Obsidian
-- **Themes:** shinji-lock-in + miasma (Radiohead / Kid A wallpaper)
-- **Plugins:** Lock-in sessions (flowstate) + pixel-player
+##Comes With:
+
+**Compositor / Tiling WM** : Hyprland (for Larping effectively)
+**Bootloader** : GRUB
+**Login Manager** : ly
+**Browser** : Zen Browser (it is the best browser)
+**File Manager** : Nautilus
+**Note Taking / larping** : Obsidian (Best larp tools)
+
+since this distro is espeacially tailored towards larpers, I have included a few bonus larp tools:
+Btop (classic), cava (how could we forget this one),cmatrix (The BEST larp tool), Fastfetch (did you really think that this was not included??) (Fastfetch comes with the arch logo to maximize arch linux larping)
 
 ## Keybindings
 
@@ -25,9 +31,14 @@ Ships with:
 | mod + shift + o | Obsidian |
 | mod + w | Close window |
 | mod + h/j/k/l | Focus left/down/up/right |
+| mod + 1/2/3/4/5... | switching Workspaces
 
-## Attribution
+## Themes
+It comes with a Gruvbox theme with a Radiohead wallpaper (i love radiohead + great larp band) and the other theme is a minimal black and white theme with a neon genesis evangelion wallpaper (classic larp show!). If you do not like the preinstalled themes, YOUR TASTE SUCKS. 
 
-Caelium is derived from [Omarchy](https://omarchy.org), released under the MIT License. Caelium modifications are also MIT licensed.
+## Installation
+The ISO is giving me some trouble right now, it will be out soon :)
 
-See [LICENSE](./LICENSE).
+##omarchy
+I clearly took a lot of inspiration from *bloatarchy* while making this. This distro MOGS bloatarchy to death. Dw its better. Unlike *bloatarchy* it does not have any AI bs. Also it is up-to-date with arch
+ [LICENSE](./LICENSE).
