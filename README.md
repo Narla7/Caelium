@@ -1,13 +1,15 @@
+`               _ _                 
   ___ __ _  ___| (_)_   _ _ __ ___  
  / __/ _` |/ _ \ | | | | | '_ ` _ \ 
 | (_| (_| |  __/ | | |_| | | | | | |
  \___\__,_|\___|_|_|\__,_|_| |_| |_|
+                                    `
                                     
 # Caelium
 
 Minimal. Opinionated. Linux.
 
-##Comes With:
+## Comes With:
 
 **Compositor / Tiling WM** : Hyprland (for Larping effectively)
 **Bootloader** : GRUB
