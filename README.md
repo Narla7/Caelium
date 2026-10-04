@@ -1,10 +1,4 @@
-`               _ _                 
-  ___ __ _  ___| (_)_   _ _ __ ___  
- / __/ _` |/ _ \ | | | | | '_ ` _ \ 
-| (_| (_| |  __/ | | |_| | | | | | |
- \___\__,_|\___|_|_|\__,_|_| |_| |_|
-                                    `
-                                    
+
 # Caelium
 
 Minimal. Opinionated. Linux.
@@ -12,11 +6,16 @@ Minimal. Opinionated. Linux.
 ## Comes With:
 
 **Compositor / Tiling WM** : Hyprland (for Larping effectively)
+
 **Bootloader** : GRUB
-**Login Manager** : ly
-**Browser** : Zen Browser (it is the best browser)
-**File Manager** : Nautilus
-**Note Taking / larping** : Obsidian (Best larp tools)
+
+**Login Manager** : ly	
+
+**Browser** : Zen Browser (it is the best browser)	
+
+**File Manager** : Nautilus	
+
+**Note Taking / larping** : Obsidian (Best larp tools)	
 
 since this distro is espeacially tailored towards larpers, I have included a few bonus larp tools:
 Btop (classic), cava (how could we forget this one),cmatrix (The BEST larp tool), Fastfetch (did you really think that this was not included??) (Fastfetch comes with the arch logo to maximize arch linux larping)
